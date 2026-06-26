@@ -62,6 +62,16 @@ static int GetLittleLong( void )
 	return val;
 }
 
+static short Convert24To16( const byte *src )
+{
+	int sample = ( src[0] << 0 ) | ( src[1] << 8 ) | ( src[2] << 16 );
+
+	if( sample & 0x800000 )
+		sample |= ~0xffffff;
+
+	return (short)( sample >> 8 );
+}
+
 /*
 =================
 FindNextChunk
@@ -233,9 +243,9 @@ qboolean Sound_LoadWAV( const char *name, const byte *buffer, fs_offset_t filesi
 	sound.width = GetLittleShort() / 8;
 	if( mpeg_stream ) sound.width = 2; // mp3 always 16bit
 
-	if( sound.width != 1 && sound.width != 2 )
+	if( sound.width != 1 && sound.width != 2 && sound.width != 3 )
 	{
-		Con_DPrintf( S_ERROR "%s: only 8 and 16 bit WAV files supported (%s)\n", __func__, name );
+		Con_DPrintf( S_ERROR "%s: only 8, 16 and 24 bit WAV files supported (%s)\n", __func__, name );
 		return false;
 	}
 
@@ -312,32 +322,49 @@ qboolean Sound_LoadWAV( const char *name, const byte *buffer, fs_offset_t filesi
 		return Sound_LoadMPG( name, buffer + hdr_size, filesize - hdr_size );
 	}
 
-	// Load the data
-	sound.size = sound.samples * sound.width * sound.channels;
-	sound.wav = Mem_Malloc( host.soundpool, sound.size );
+	const int source_width = sound.width;
+	const byte *source = buffer + (iff_dataPtr - buffer);
 
-	memcpy( sound.wav, buffer + (iff_dataPtr - buffer), sound.size );
-
-	// swap 16-bit samples from little endian to native
-	if( sound.width == 2 )
+	if( source_width == 3 )
 	{
+		sound.width = 2;
+		sound.size = sound.samples * sound.width * sound.channels;
+		sound.wav = Mem_Malloc( host.soundpool, sound.size );
+
 		short *p = (short *)sound.wav;
-		int count = sound.size / 2;
+		int count = sound.samples * sound.channels;
 		for( int i = 0; i < count; i++ )
-			p[i] = LittleShort( p[i] );
+			p[i] = Convert24To16( source + i * source_width );
 	}
-
-	// now convert 8-bit sounds to signed
-	if( sound.width == 1 )
+	else
 	{
-		signed char	*pData = (signed char *)sound.wav;
+		// Load the data
+		sound.size = sound.samples * sound.width * sound.channels;
+		sound.wav = Mem_Malloc( host.soundpool, sound.size );
 
-		for( int i = 0; i < sound.samples; i++ )
+		memcpy( sound.wav, source, sound.size );
+
+		// swap 16-bit samples from little endian to native
+		if( sound.width == 2 )
 		{
-			for( int j = 0; j < sound.channels; j++ )
+			short *p = (short *)sound.wav;
+			int count = sound.size / 2;
+			for( int i = 0; i < count; i++ )
+				p[i] = LittleShort( p[i] );
+		}
+
+		// now convert 8-bit sounds to signed
+		if( sound.width == 1 )
+		{
+			signed char	*pData = (signed char *)sound.wav;
+
+			for( int i = 0; i < sound.samples; i++ )
 			{
-				*pData = (byte)((int)((byte)*pData) - 128 );
-				pData++;
+				for( int j = 0; j < sound.channels; j++ )
+				{
+					*pData = (byte)((int)((byte)*pData) - 128 );
+					pData++;
+				}
 			}
 		}
 	}

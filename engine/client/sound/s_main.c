@@ -1227,6 +1227,16 @@ rawchan_t *S_FindRawChannel( int entnum, qboolean create )
 S_RawSamplesStereo
 ===================
 */
+static int S_ReadInt24( const byte *src )
+{
+	int sample = ( src[0] << 0 ) | ( src[1] << 8 ) | ( src[2] << 16 );
+
+	if( sample & 0x800000 )
+		sample |= ~0xffffff;
+
+	return sample;
+}
+
 uint S_RawSamplesStereo( portable_samplepair_t *rawsamples, uint rawend, uint max_samples, uint samples, uint rate, word width, word channels, const byte *data )
 {
 	uint	src;
@@ -1257,6 +1267,30 @@ uint S_RawSamplesStereo( portable_samplepair_t *rawsamples, uint rawend, uint ma
 				uint dst = rawend++ & ( max_samples - 1 );
 				rawsamples[dst].left = in[src];
 				rawsamples[dst].right = in[src];
+			}
+		}
+	}
+	else if( width == 3 )
+	{
+		const byte *in = data;
+
+		if( channels == 2 )
+		{
+			for( src = 0; src < samples; samplefrac += fracstep, src = ( samplefrac >> S_RAW_SAMPLES_PRECISION_BITS ))
+			{
+				uint dst = rawend++ & ( max_samples - 1 );
+				rawsamples[dst].left = S_ReadInt24( in + ( src * 2 + 0 ) * 3 ) >> 8;
+				rawsamples[dst].right = S_ReadInt24( in + ( src * 2 + 1 ) * 3 ) >> 8;
+			}
+		}
+		else
+		{
+			for( src = 0; src < samples; samplefrac += fracstep, src = ( samplefrac >> S_RAW_SAMPLES_PRECISION_BITS ))
+			{
+				uint dst = rawend++ & ( max_samples - 1 );
+				int sample = S_ReadInt24( in + src * 3 ) >> 8;
+				rawsamples[dst].left = sample;
+				rawsamples[dst].right = sample;
 			}
 		}
 	}

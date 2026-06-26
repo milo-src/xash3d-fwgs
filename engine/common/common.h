@@ -538,7 +538,7 @@ typedef struct wavdata_s
 	uint    samples;   // total samplecount in wav
 	uint    type;      // compression type
 	uint    flags;     // misc sound flags
-	word    rate;      // num samples per second (e.g. 11025 - 11 khz)
+	uint    rate;      // num samples per second (e.g. 11025 - 11 khz)
 	byte    width;     // resolution - bum bits divided by 8 (8 bit is 1, 16 bit is 2)
 	byte    channels;  // num channels (1 - mono, 2 - stereo)
 	byte    buffer[];  // sound buffer
