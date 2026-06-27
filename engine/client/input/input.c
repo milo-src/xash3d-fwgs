@@ -350,6 +350,11 @@ void IN_SetClientMouseVisible( qboolean visible )
 	IN_CheckMouseState( in_mouseactive );
 }
 
+qboolean IN_ClientMouseIsVisible( void )
+{
+	return in_client_mouse_visible;
+}
+
 
 
 /*
@@ -378,7 +383,7 @@ static void IN_MouseMove( void )
 	// if the menu is visible, move the menu cursor
 	UI_MouseMove( x, y );
 
-	if( in_client_mouse_visible )
+	if( in_client_mouse_visible && !host.mouse_visible )
 		Platform_SetCursorType( dc_arrow );
 }
 
