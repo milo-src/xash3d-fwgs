@@ -2883,6 +2883,7 @@ legacy of dinput code
 */
 static void GAME_EXPORT pfnSetMouseEnable( qboolean fEnable )
 {
+	IN_SetClientMouseVisible( fEnable );
 }
 
 

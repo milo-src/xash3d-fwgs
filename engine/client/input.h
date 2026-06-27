@@ -36,6 +36,7 @@ void IN_MouseEvent( int key, int down );
 void IN_MWheelEvent( int direction );
 void IN_ActivateMouse( void );
 void IN_DeactivateMouse( void );
+void IN_SetClientMouseVisible( qboolean visible );
 void IN_MouseSavePos( void );
 void IN_MouseRestorePos( void );
 void IN_ToggleClientMouse( int newstate, int oldstate );

@@ -28,6 +28,7 @@ GNU General Public License for more details.
 
 static qboolean	in_mouseactive;				// false when not focus app
 static qboolean	in_mouseinitialized;
+static qboolean	in_client_mouse_visible;
 static struct
 {
 	int x, y;
@@ -271,6 +272,7 @@ void IN_SetMouseGrab( qboolean set )
 static void IN_CheckMouseState( qboolean active )
 {
 	qboolean use_raw_input;
+	qboolean cursor_visible;
 
 #if XASH_WIN32
 	use_raw_input = ( m_rawinput.value && clgame.client_dll_uses_sdl ) || clgame.dllFuncs.pfnLookEvent != NULL;
@@ -281,12 +283,14 @@ static void IN_CheckMouseState( qboolean active )
 	if( m_ignore.value )
 		active = false;
 
-	if( active && use_raw_input && !host.mouse_visible && cls.state == ca_active )
+	cursor_visible = host.mouse_visible || in_client_mouse_visible;
+
+	if( active && use_raw_input && !cursor_visible && cls.state == ca_active )
 		IN_SetRelativeMouseMode( true );
 	else
 		IN_SetRelativeMouseMode( false );
 
-	if( active && !host.mouse_visible && cls.state == ca_active )
+	if( active && !cursor_visible && cls.state == ca_active )
 		IN_SetMouseGrab( true );
 	else
 		IN_SetMouseGrab( false );
@@ -328,6 +332,24 @@ void IN_DeactivateMouse( void )
 	in_mouseactive = false;
 }
 
+/*
+===========
+IN_SetClientMouseVisible
+
+Lets the client DLL temporarily use the normal OS cursor while key_dest
+stays in game, e.g. for custom HUD menus.
+===========
+*/
+void IN_SetClientMouseVisible( qboolean visible )
+{
+	if( !in_mouseinitialized )
+		return;
+
+	in_client_mouse_visible = visible;
+	Platform_SetCursorType( visible ? dc_arrow : dc_none );
+	IN_CheckMouseState( in_mouseactive );
+}
+
 
 
 /*
@@ -355,6 +377,9 @@ static void IN_MouseMove( void )
 
 	// if the menu is visible, move the menu cursor
 	UI_MouseMove( x, y );
+
+	if( in_client_mouse_visible )
+		Platform_SetCursorType( dc_arrow );
 }
 
 /*
