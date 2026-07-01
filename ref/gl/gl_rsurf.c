@@ -566,6 +566,59 @@ static texture_t *R_TextureAnimation( msurface_t *s )
 R_AddDynamicLights
 ===============
 */
+static qboolean R_SurfaceSamplePoint( const msurface_t *surf, float light_s, float light_t, vec3_t out )
+{
+	const mextrasurf_t *info = surf->info;
+	vec3_t lm_s_axis, lm_t_axis, plane_axis;
+	vec3_t cross_t_plane, cross_plane_s, cross_s_t;
+
+	VectorCopy( info->lmvecs[0], lm_s_axis );
+	VectorCopy( info->lmvecs[1], lm_t_axis );
+	VectorCopy( surf->plane->normal, plane_axis );
+
+	CrossProduct( lm_t_axis, plane_axis, cross_t_plane );
+	float denom = DotProduct( lm_s_axis, cross_t_plane );
+	if( fabs( denom ) < 0.0001f )
+		return false;
+
+	CrossProduct( plane_axis, lm_s_axis, cross_plane_s );
+	CrossProduct( lm_s_axis, lm_t_axis, cross_s_t );
+
+	const float d_s = light_s - info->lmvecs[0][3];
+	const float d_t = light_t - info->lmvecs[1][3];
+	const float d_plane = surf->plane->dist;
+	const float inv_denom = 1.0f / denom;
+
+	for( int i = 0; i < 3; i++ )
+		out[i] = ( d_s * cross_t_plane[i] + d_t * cross_plane_s[i] + d_plane * cross_s_t[i] ) * inv_denom;
+
+	return true;
+}
+
+static float R_SpotlightSampleIntensity( const dlight_t *dl, const vec3_t light_origin, const vec3_t spotdir, const vec3_t sample_pos )
+{
+	vec3_t delta;
+	VectorSubtract( sample_pos, light_origin, delta );
+
+	const float dist = VectorLength( delta );
+	if( dist <= 1.0f || dist >= dl->radius )
+		return 0.0f;
+
+	VectorScale( delta, 1.0f / dist, delta );
+	float cone = DotProduct( delta, spotdir );
+	if( cone <= dl->spotdot )
+		return 0.0f;
+
+	float softness = bound( 0.05f, dl->spotsoft, 1.0f );
+	cone = bound( 0.0f, ( cone - dl->spotdot ) / ( 1.0f - dl->spotdot ), 1.0f );
+	cone = bound( 0.0f, cone / softness, 1.0f );
+	cone = cone * cone * ( 3.0f - 2.0f * cone );
+
+	float distanceFade = bound( 0.25f, 1.0f - dist / ( dl->radius * 1.25f ), 1.0f );
+
+	return 180.0f * cone * distanceFade;
+}
+
 static void R_AddDynamicLights( const msurface_t *surf )
 {
 	const mextrasurf_t *info = surf->info;
@@ -602,6 +655,41 @@ static void R_AddDynamicLights( const msurface_t *surf )
 		if( !tr.modelviewIdentity )
 			Matrix4x4_VectorITransform( RI.objectMatrix, dl->origin, origin_l );
 		else VectorCopy( dl->origin, origin_l );
+
+		if( FBitSet( dl->flags, DLIGHT_SPOTLIGHT ))
+		{
+			vec3_t spotdir_l;
+
+			if( !tr.modelviewIdentity )
+				Matrix4x4_VectorIRotate( RI.objectMatrix, dl->spotdir, spotdir_l );
+			else VectorCopy( dl->spotdir, spotdir_l );
+			VectorNormalize( spotdir_l );
+
+			for( int t = 0; t < tmax; t++ )
+			{
+				const float light_t = info->lightmapmins[1] + sample_size * t;
+
+				for( int s = 0; s < smax; s++ )
+				{
+					vec3_t sample_pos;
+					const float light_s = info->lightmapmins[0] + sample_size * s;
+					if( !R_SurfaceSamplePoint( surf, light_s, light_t, sample_pos ))
+						continue;
+
+					const float add = R_SpotlightSampleIntensity( dl, origin_l, spotdir_l, sample_pos );
+					if( add > 0.0f )
+					{
+						uint *bl = &r_blocklights[(s + (t * smax)) * 3];
+
+						bl[0] += ((int)( add * 256.0f ) * dl->color.r ) / 256;
+						bl[1] += ((int)( add * 256.0f ) * dl->color.g ) / 256;
+						bl[2] += ((int)( add * 256.0f ) * dl->color.b ) / 256;
+					}
+				}
+			}
+
+			continue;
+		}
 
 		float rad = dl->radius;
 		float dist = PlaneDiff( origin_l, surf->plane );
@@ -3964,4 +4052,3 @@ void GL_BuildLightmaps( void )
 		gEngfuncs.drawFuncs->GL_BuildLightmaps( );
 	}
 }
-

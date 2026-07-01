@@ -32,6 +32,10 @@ TEMPENTS MANAGEMENT
 ==============================================================
 */
 #define FLASHLIGHT_DISTANCE		2000	// in units
+#define FLASHLIGHT_SPOT_MAXDIST	1050.0f
+#define FLASHLIGHT_SPOT_PADDING	96.0f
+#define FLASHLIGHT_SPOT_DOT	0.925f
+#define FLASHLIGHT_SPOT_SOFT	0.55f
 #define SHARD_VOLUME		12.0f	// on shard ever n^3 units
 #define MAX_MUZZLEFLASH		3
 
@@ -2605,7 +2609,6 @@ static void CL_UpdateFlashlight( cl_entity_t *ent )
 	vec3_t		forward, view_ofs;
 	vec3_t		vecSrc, vecEnd;
 	pmtrace_t		trace;
-	cl_entity_t	*hit;
 	dlight_t		*dl;
 
 	if( ent->index == ( cl.playernum + 1 ))
@@ -2637,26 +2640,26 @@ static void CL_UpdateFlashlight( cl_entity_t *ent )
 
 	trace = CL_TraceLine( vecSrc, vecEnd, PM_STUDIO_BOX );
 
-	// update flashlight endpos
 	dl = CL_AllocDlight( ent->index );
-#if 1
-	hit = CL_GetEntityByIndex( clgame.pmove->physents[trace.ent].info );
-	if( hit && hit->model && ( hit->model->type == mod_alias || hit->model->type == mod_studio ))
-		VectorCopy( hit->origin, dl->origin );
-	else VectorCopy( trace.endpos, dl->origin );
-#else
-	VectorCopy( trace->endpos, dl->origin );
-#endif
-	// compute falloff
+
+	// CoF-style flashlight: render as a soft spotlight from the player view,
+	// not as a tiny point light placed at the trace hit.
+	VectorCopy( vecSrc, dl->origin );
+	VectorNormalize2( forward, dl->spotdir );
+	dl->flags = DLIGHT_SPOTLIGHT;
+	dl->spotdot = FLASHLIGHT_SPOT_DOT;
+	dl->spotsoft = FLASHLIGHT_SPOT_SOFT;
+
 	float falloff = trace.fraction * FLASHLIGHT_DISTANCE;
 	if( falloff < 500.0f ) falloff = 1.0f;
 	else falloff = 500.0f / falloff;
 	falloff *= falloff;
 
-	// apply brigthness to dlight
-	dl->color.r = dl->color.g = dl->color.b = bound( 0, falloff * 255, 255 );
+	dl->color.r = bound( 0, falloff * 255, 255 );
+	dl->color.g = bound( 0, falloff * 238, 238 );
+	dl->color.b = bound( 0, falloff * 205, 205 );
 	dl->die = cl.time + 0.01f; // die on next frame
-	dl->radius = 80;
+	dl->radius = bound( 360.0f, trace.fraction * FLASHLIGHT_DISTANCE + FLASHLIGHT_SPOT_PADDING, FLASHLIGHT_SPOT_MAXDIST );
 }
 
 static void R_EntityDimlight( cl_entity_t *ent, int key )

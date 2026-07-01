@@ -67,9 +67,15 @@ typedef struct dlight_s
 	float    minlight; // don't add when contributing less
 	int      key;      // so entities can reuse same entry
 	qboolean dark;     // subtracts light instead of adding
+	int      flags;
+	vec3_t   spotdir;  // normalized spotlight direction
+	float    spotdot;  // outer cone dot product
+	float    spotsoft; // 0..1 softness multiplier
 } dlight_t;
 
-STATIC_CHECK_SIZEOF( dlight_t, 40, 40 );
+#define DLIGHT_SPOTLIGHT BIT( 0 )
+
+STATIC_CHECK_SIZEOF( dlight_t, 64, 64 );
 
 //
 // cl_input

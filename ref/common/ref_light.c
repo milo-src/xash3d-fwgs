@@ -93,7 +93,7 @@ R_MarkLights
 */
 static void R_MarkLights( const dlight_t *light, int bit, const mnode_t *node, model_t *model, int dlightframecount )
 {
-	const float virtual_radius = light->radius * Q_max( 1.0f, r_dlight_virtual_radius.value );
+	const float virtual_radius = light->radius * ( FBitSet( light->flags, DLIGHT_SPOTLIGHT ) ? 1.0f : Q_max( 1.0f, r_dlight_virtual_radius.value ) );
 	const float maxdist = light->radius * light->radius;
 start:
 	if( !node || node->contents < 0 )
@@ -632,7 +632,32 @@ void R_EntityDynamicLight( cl_entity_t *ent, alight_t *plight, qboolean draw_wor
 		VectorSubtract( ent->origin, dl->origin, dist );
 
 		float radius = VectorLength( dist );
-		float add = ( dl->radius - radius );
+		float add;
+
+		if( FBitSet( dl->flags, DLIGHT_SPOTLIGHT ))
+		{
+			if( radius <= 1.0f || radius >= dl->radius )
+				continue;
+
+			vec3_t dir;
+			VectorScale( dist, 1.0f / radius, dir );
+
+			float cone = DotProduct( dir, dl->spotdir );
+			if( cone <= dl->spotdot )
+				continue;
+
+			const float softness = bound( 0.05f, dl->spotsoft, 1.0f );
+			cone = bound( 0.0f, ( cone - dl->spotdot ) / ( 1.0f - dl->spotdot ), 1.0f );
+			cone = bound( 0.0f, cone / softness, 1.0f );
+			cone = cone * cone * ( 3.0f - 2.0f * cone );
+
+			float distanceFade = bound( 0.25f, 1.0f - radius / ( dl->radius * 1.25f ), 1.0f );
+			add = 96.0f * cone * distanceFade;
+		}
+		else
+		{
+			add = ( dl->radius - radius );
+		}
 
 		if( add > 0.0f )
 		{
